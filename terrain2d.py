@@ -5,9 +5,11 @@ import language
 
 import numpy as np
 import matplotlib as mpl
-mpl.use('qt5agg')
+pgf_with_rc_fonts = {"pgf.texsystem": "pdflatex"}
+mpl.rcParams.update(pgf_with_rc_fonts)
 import matplotlib.pyplot as plt
 print(mpl.pyplot.get_backend())
+#from mpl_toolkits.mplot3d import Axes3D
 import scipy.spatial as spl
 import scipy.sparse as spa
 import scipy.sparse.csgraph as csg
@@ -329,6 +331,7 @@ class MapGrid(object):
         
         self.raise_sealevel(np.random.randint(sealevel, sealevel+20))
         self.clean_coast()
+        #print(self.elevation)
 
     def island_heightmap(self):
         self.erodability[:] = np.exp(
@@ -675,6 +678,7 @@ class MapGrid(object):
         print("Plotting")
         fig = plt.figure(figsize=(6,6))
         ax = fig.add_axes([0,0,1,1])
+        #ax = fig.add_axes([0,0,1,1], projection='3d')
                 
         elev = np.where(self.elevation > 0, 0.1, 0)
         good = ~self.extend_area(self.edge, 10)
@@ -748,7 +752,6 @@ class MapGrid(object):
         ax.scatter(self.vxs[smallcities,0], self.vxs[smallcities,1],
                    c='black', s=30, zorder=15, edgecolor='none')
 
-        #fig.show()  ##Todo:LQ here. none of this is working
 
         labelbox = dict(
             boxstyle='round,pad=0.1',
@@ -794,8 +797,9 @@ class MapGrid(object):
             scores[self.vxs[:,1] < 0.03] -= 50000
             assert scores.max() > -50000
             xy = self.vxs[np.argmax(scores),:]
+            # TODO: LQ: this draws a bounding box within which a city will randomly be placed
             #ax.axvspan(xy[0] - w, xy[0] + w, xy[1] - 0.07, xy[1] + 0.03,
-                    #facecolor='none', edgecolor='red', zorder=19)
+            #           facecolor='none', edgecolor='red', zorder=19)
             print("Labelling %s at %.1f" % (name, scores.max()))
             reglabels.append(xy)
             label = (r"\sc " + name) if tex else name
@@ -850,19 +854,22 @@ class MapGrid(object):
             pathcol.set_linewidth(2.5)
             pathcol.set_zorder(14)
             ax.add_collection(pathcol)
+
             #plt.plot(self.vxs[path, 0], self.vxs[path, 1], c='red',
-                    #zorder=10000, linewidth=2, alpha=0.5)
+            #        zorder=10000, linewidth=2, alpha=0.5)
 
         ax.axis('image')
         ax.set_xlim(0.0,1.0)
         ax.set_ylim(0.0,1.0)
+
+
         #plt.xticks(np.arange(0, 21) * .05)
         #plt.yticks(np.arange(0, 21) * .05)
         #plt.grid(True)
         ax.axis('off')
 
         #plt.show()
-        #plt.savefig(filename, **kwargs)
+        plt.savefig(filename, **kwargs)
         #plt.savefig('test.png')
         # LQ: if the above line don't work, install Perl for windows
         plt.show()
@@ -886,13 +893,13 @@ class MapGrid(object):
         
 ## In[88]:
 if __name__ == '__main__':
-    for i in range(2):
+    for i in range(1):
         plt.close('all')
         while True:
             try:
                 m = MapGrid()
-                #filename = "tests/%s-%02d.png" % (m.mode, i)
-                filename = 'test.png'
+                filename = "tests/%s-%02d.png" % (m.mode, i)
+                #filename = 'test.png'
                 m.plot(filename)
                 break
             except AssertionError:
