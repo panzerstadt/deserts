@@ -1,20 +1,43 @@
-import matplotlib.pyplot as plt
+# First import everthing you need
+import numpy as np
+import matplotlib as mpl
+from matplotlib import pyplot as plt
+print(mpl.pyplot.get_backend())
+
+from matplotlib import animation
 from mpl_toolkits.mplot3d import Axes3D
-from mpl_toolkits.basemap import Basemap
 
-m = Basemap(projection='merc',
-            llcrnrlat=52.0,urcrnrlat=58.0,
-            llcrnrlon=19.0,urcrnrlon=40.0,
-            rsphere=6371200.,resolution='h',area_thresh=10)
 
+# Create some random data, I took this piece from here:
+# http://matplotlib.org/mpl_examples/mplot3d/scatter3d_demo.py
+def randrange(n, vmin, vmax):
+    return (vmax - vmin) * np.random.rand(n) + vmin
+n = 100
+xx = randrange(n, 23, 32)
+yy = randrange(n, 0, 100)
+zz = randrange(n, -50, -25)
+
+# Create a figure and a 3D Axes
 fig = plt.figure()
 ax = Axes3D(fig)
-ax.add_collection3d(m.drawcoastlines(linewidth=0.25))
-ax.add_collection3d(m.drawcountries(linewidth=0.35))
-ax.add_collection3d(m.drawrivers(color='blue'))
 
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Height')
+# Create an init function and the animate functions.
+# Both are explained in the tutorial. Since we are changing
+# the the elevation and azimuth and no objects are really
+# changed on the plot we don't have to return anything from
+# the init and animate function. (return value is explained
+# in the tutorial.
+def init():
+    ax.scatter(xx, yy, zz, marker='o', s=20, c="goldenrod", alpha=0.6)
+    return fig,
 
-fig.show()
+def animate(i):
+    ax.view_init(elev=10., azim=i)
+    return fig,
+
+# Animate
+anim = animation.FuncAnimation(fig, animate, init_func=init,
+                               frames=360, interval=20, blit=True)
+#plt.show()
+# Save
+anim.save('rotation.gif', dpi=80, writer='imagemagick')

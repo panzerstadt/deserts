@@ -4,16 +4,20 @@
 import language
 
 import numpy as np
+from matplotlib import animation
 import matplotlib as mpl
 pgf_with_rc_fonts = {"pgf.texsystem": "pdflatex"}
 mpl.rcParams.update(pgf_with_rc_fonts)
 import matplotlib.pyplot as plt
 print(mpl.pyplot.get_backend())
-#from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import patch_collection_2d_to_3d, paths_to_3d_segments
+import mpl_toolkits
 import scipy.spatial as spl
 import scipy.sparse as spa
 import scipy.sparse.csgraph as csg
 import scipy.sparse.linalg as sla
+from sklearn.preprocessing import normalize
 from collections import defaultdict
 import heapq
 import noise
@@ -677,8 +681,8 @@ class MapGrid(object):
     def plot(self, filename, rivers=True, cmap=mpl.cm.Greys, **kwargs):
         print("Plotting")
         fig = plt.figure(figsize=(6,6))
-        ax = fig.add_axes([0,0,1,1])
-        #ax = fig.add_axes([0,0,1,1], projection='3d')
+        #ax = fig.add_axes([0,0,1,1])
+        ax = fig.add_axes([0,0,1,1], projection='3d')
                 
         elev = np.where(self.elevation > 0, 0.1, 0)
         good = ~self.extend_area(self.edge, 10)
@@ -686,6 +690,15 @@ class MapGrid(object):
         goodidxs = [i for i in range(self.nvxs) if good[i]]
         tris = [self.tris[i] for i in goodidxs]
         elevs = elev[goodidxs]
+        print("elevations are:", elevs, type(elevs))
+        print(elevs.shape)
+
+        # todo: lq: makes a crazy heightmap
+        #tris_np = np.array(tris)
+        #tris_np = normalize(tris_np)
+        #ax.plot_trisurf(tris_np[:, 0], tris_np[:, 1], tris_np[:, 2])
+
+
 
         slopelines = []
         r = 0.25 * self.nvxs ** -0.5
@@ -694,6 +707,8 @@ class MapGrid(object):
             t = self.tris[i]
             s, s2 = trislope(self.pts[t,:], self.elevation_pts[t])
             s /= 10
+            ht = s/10
+
             if abs(s) < 0.1 + 0.3 * np.random.random():
                 continue
             x, y = self.vxs[i,:]
@@ -705,43 +720,51 @@ class MapGrid(object):
                 l /= n
                 uv = np.random.normal(0, r/2, (min(n, 4), 2))
                 for u, v in uv:
-                    slopelines.append([(x+u-l,y+v-l*s), (x+u+l,
-                        y+v+l*s)])
+                    slopelines.append([(x+u-l, y+v-l*s, ht), (x+u+l,
+                        y+v+l*s, ht)])
             else:
-                slopelines.append([(x-l, y-l*s), (x+l, y+l*s)])
+                slopelines.append([(x-l, y-l*s, ht), (x+l, y+l*s, ht)])
+                # todo: lq: added s2(z value) to the ends of the lists
             
-        slopecol = mpl.collections.LineCollection(slopelines)
+        slopecol = mpl_toolkits.mplot3d.art3d.Line3DCollection(slopelines)
         slopecol.set_zorder(1)
         slopecol.set_color('black')
         slopecol.set_linewidth(0.3)
         ax.add_collection(slopecol)
 
-#         land = np.where(elevs > 0)[0]
-#         landpatches = [mpl.patches.Polygon(self.pts[tris[i],:], closed=True) for i in land]
-#         landpatchcol = mpl.collections.PatchCollection(landpatches)
-#         landpatchcol.set_color(colors[land,:])
-#         landpatchcol.set_zorder(0)
-#         ax.gca().add_collection(landpatchcol)
+#        land = np.where(elevs > 0)[0]
+#        landpatches = [mpl.patches.Polygon(self.pts[tris[i],:], closed=True) for i in land]
+#        landpatchcol = mpl.collections.PatchCollection(landpatches)
+#        landpatchcol = patch_collection_2d_to_3d(landpatchcol, zs=1, zdir='z', depthshade=True)
+#        #landpatchcol.set_color('white')
+#        #landpatchcol.set_zorder(0)
+#        ax.add_collection(landpatchcol)
         
         sea = np.where(elevs <= 0)[0]
         seapatches = [mpl.patches.Polygon(self.pts[tris[i],:], closed=True) for i in sea]
-        seapatchcol = mpl.collections.PatchCollection(seapatches)
-        seapatchcol.set_color('white')
-        seapatchcol.set_zorder(10)        
-        ax.add_collection(seapatchcol)
+        #seapatchcol = mpl.collections.PatchCollection(seapatches)
+        seapatchcol = mpl_toolkits.mplot3d.art3d.Patch3DCollection(seapatches)
+        seapatchcol.set_color('grey')
+        #seapatchcol = patch_collection_2d_to_3d(seapatchcol)
+        #seapatchcol.set_3d_properties(zs=0, zdir='z')  #todo: lq: added z value for sea
+        seapatchcol.set_zorder(10)
+        ax.add_collection3d(seapatchcol)
+
 
         if rivers:
             land = good & (self.elevation[:-1] > 0) & (self.downhill != -1) & \
                    (self.flow > np.percentile(self.flow, 100 - self.riverperc))
             rivers = relaxpts(self.vxs, [(u, self.downhill[u]) for u in range(self.nvxs) if land[u]])
-            print(len(rivers), sum(land))
+            print("rivers algorithm: ", rivers)
+            print('rivers and land respectively: ', len(rivers), sum(land))
             rivers = mergelines(rivers)
-            rivercol = mpl.collections.PathCollection(rivers)
+            #rivercol = mpl.collections.PathCollection(rivers)
+            rivercol = mpl_toolkits.mplot3d.art3d.Path3DCollection(rivers)
             rivercol.set_edgecolor('black')
             rivercol.set_linewidth(1)
             rivercol.set_facecolor('none')
             rivercol.set_zorder(9)
-            ax.add_collection(rivercol)
+            ax.add_collection3d(rivercol)
         
         bigcities = self.big_cities
         print('LQ: big cities are:', bigcities)
@@ -811,6 +834,7 @@ class MapGrid(object):
                         )
        
         borders = []
+        borderheights = []  #todo: lq: added list to keep heights
         borderadj = defaultdict(list)
         coasts = []
         for rv, rp in zip(self.vor.ridge_vertices, self.vor.ridge_points):
@@ -822,56 +846,93 @@ class MapGrid(object):
                 continue
             if self.territories[v1] != self.territories[v2] and self.elevation[v1] > 0 and self.elevation[v2] > 0:
                 borders.append((p1, p2))
+                borderheights.append(max(rv))  #todo: LQ: added the highest rv(ridge vertice) as height to border
             if (self.elevation[v1] > 0 and self.elevation[v2] <= 0) or (self.elevation[v2] > 0 and self.elevation[v1] <= 0):
                 coasts.append(self.pts[rp, :])
                 
         borders = mergelines(relaxpts(self.pts, borders))
         print("Borders:", len(borders))
-        bordercol = mpl.collections.PathCollection(borders)
+        #print(borders)
+        #raise SystemExit('hold up')
+        #bordercol = mpl.collections.PathCollection(borders)
+        bordercol = mpl_toolkits.mplot3d.art3d.Path3DCollection(borders)
+        #bordercol = patch_collection_2d_to_3d(bordercol)
+        #bordercol.set_3d_properties(zs=0, zdir='z')  #todo: lq: make this a real landscape hugging border
         bordercol.set_facecolor('none')
         bordercol.set_edgecolor('black')
         bordercol.set_linestyle(':')
         bordercol.set_linewidth(3)
         bordercol.set_zorder(11)
-        ax.add_collection(bordercol)
+        ax.add_collection3d(bordercol)
 
-        coastcol = mpl.collections.PathCollection(mergelines(coasts))
+        #coastcol = mpl.collections.PathCollection(mergelines(coasts))
+        coastcol = mpl_toolkits.mplot3d.art3d.Path3DCollection(mergelines(coasts))
+        #coastcol = patch_collection_2d_to_3d(mergelines(coasts))
+        #coastcol = patch_collection_2d_to_3d(coastcol)
+        #coastcol.set_3d_properties(zs=0, zdir='z')  #todo: lq: should be safe making coastlines at height 2
         coastcol.set_facecolor('none')
         coastcol.set_edgecolor('black')
         coastcol.set_zorder(12)
         coastcol.set_linewidth(1.5)
-        ax.add_collection(coastcol)
+        ax.add_collection3d(coastcol)
 
         clist = self.ordered_cities()
         clist = ["topleft"] + list(clist) + ["bottomright"]
         for c1, c2 in zip(clist[:-1], clist[1:]):
             path, _ = self.shortest_path(c1, c2)
             path = mergelines(relaxpts(self.vxs, zip(path[:-1], path[1:])))
-            pathcol = mpl.collections.PathCollection(path)
+            #pathcol = mpl.collections.PathCollection(path)
+            pathcol = mpl_toolkits.mplot3d.art3d.Path3DCollection(path)
+            #pathcol = paths_to_3d_segments(pathcol, zs=0, zdir='z')
+            pathcol.set_3d_properties(zs=0, zdir='z')  #todo: lq: another hack
+
             pathcol.set_facecolor('none')
             pathcol.set_edgecolor('black')
             pathcol.set_linestyle('--')
             pathcol.set_linewidth(2.5)
             pathcol.set_zorder(14)
-            ax.add_collection(pathcol)
+            ax.add_collection3d(pathcol)
 
             #plt.plot(self.vxs[path, 0], self.vxs[path, 1], c='red',
             #        zorder=10000, linewidth=2, alpha=0.5)
 
-        ax.axis('image')
-        ax.set_xlim(0.0,1.0)
-        ax.set_ylim(0.0,1.0)
+
+        #ax.axis('image')
+        #ax.set_xlim(0.0,1.0)
+        #ax.set_ylim(0.0,1.0)
+        ax.set_xlabel('X')
+        ax.set_xlim3d(0, 1)
+        ax.set_ylabel('Y')
+        ax.set_ylim3d(0, 1)
+        ax.set_zlabel('Z')
+        ax.set_zlim3d(0, 1)
 
 
         #plt.xticks(np.arange(0, 21) * .05)
         #plt.yticks(np.arange(0, 21) * .05)
         #plt.grid(True)
         ax.axis('off')
+        #ax.autoscale_view()
+
 
         #plt.show()
-        plt.savefig(filename, **kwargs)
+        #plt.savefig(filename, **kwargs)
         #plt.savefig('test.png')
         # LQ: if the above line don't work, install Perl for windows
+
+        def animate(i):
+            ax.view_init(elev=10., azim=i)
+            return fig,
+
+        def save_animation():
+            # Animate
+            anim = animation.FuncAnimation(fig, animate,
+                                           frames=360, interval=20, blit=True)
+            # plt.show()
+            # Save
+            anim.save('rotation.gif', dpi=80, writer='imagemagick')
+
+        #save_animation()
         plt.show()
         plt.close()
 
